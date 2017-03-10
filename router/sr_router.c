@@ -34,6 +34,20 @@ void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   
 }
 
+void ICMP_sendUnreachable(struct sr_instance* sr,
+          uint8_t* packet,
+          unsigned int len,
+          char* interface) {
+
+}
+
+void ICMP_sendEcho(struct sr_instance* sr,
+          uint8_t* packet,
+          unsigned int len,
+          char* interface) {
+
+}
+
 /* Returns 1 if destination is this router, 0 if not*/
 int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
 
@@ -52,9 +66,9 @@ void handle_ip(struct sr_instance* sr,
 
   if (dstMatches) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
-      /* handle ICMP*/
+      ICMP_sendEcho(sr, packet, len, interface);
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
-      /* send ICMP unreachable*/
+      ICMP_sendUnreachable(sr, packet, len, interface);
     }    
   } else {
     /* handle IP forwarding*/
