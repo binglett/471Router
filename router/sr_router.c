@@ -34,6 +34,36 @@ void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   
 }
 
+/* Returns 1 if destination is this router, 0 if not*/
+int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+
+}
+
+/* Given an IP packet, decides what to do based on 
+   whether it is for our router or not:
+   - for this router
+   - for another router */
+void handle_ip(struct sr_instance* sr,
+        uint8_t * packet/* lent */,
+        unsigned int len,
+        char* interface/* lent */){
+  /* Give structure to raw IP packet*/
+  struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
+
+  if (dstMatches) {
+    if (ip_hdr->ip_p == IPPROTO_ICMP) {
+      /* handle ICMP*/
+    } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
+      /* send ICMP unreachable*/
+    }    
+  } else {
+    /* handle IP forwarding*/
+  }
+
+
+
+}
+
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
  * Scope:  Global
@@ -92,7 +122,16 @@ void sr_handlepacket(struct sr_instance* sr,
   printf("*** -> Received packet of length %d\n",len);
 
   /* TODO: Add forwarding logic here */
- 
+  /* Give structure to raw ethernet packet */
+  sr_ethernet_hrd_t* eth_hdr = (sr_ethernet_hrd_t*)packet;
+
+  if (ntohs(ethernetHdr->ether_type) == ethertype_arp) {
+    handle_arpreq(sr, packet);
+  } else if (ntohs(ethernetHdr->ether_type) == ethertype_ip) {
+    handle_ip(sr, packet, len, interface);
+  } else {
+    /* ??? neither arp nor IP exception? */
+  }
   
 
 }/* -- sr_handlepacket -- */
