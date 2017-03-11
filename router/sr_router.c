@@ -51,25 +51,46 @@ void IP_forward(struct sr_instance* sr,
 }
 
 /* Returns 1 if destination of packet matches router IP, 0 if not*/
-int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
-    /* get IP of interface that received packet*/
-    struct sr_if* incoming_if = sr_get_interface(sr, interface);
-    /* get destination IP */
-    struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
+int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+  /* get IP of interface that received packet*/
+  struct sr_if* incoming_if = sr_get_interface(sr, interface);
+  /* get destination IP */
+  struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
 
-    if (incoming_if->ip == arp_hdr->art_ip) {
-      return 1;
-    } 
-    return 0;
+  if (incoming_if->ip == arp_hdr->art_ip) {
+    return 1;
+  } 
+  return 0;
 }
+int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+  /* get UP of interface that received packet */ 
+  struct sr_if* incoming_if = sr_get_interface(sr, interface);
+  /* get destination IP */
+  struct sr_ip_hdr_t* ip_hdr = (sr_ip_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
+
+  if (incoming_if->ip == ip_hdr->ip_dst) {
+    return 1;
+  }
+  return 0;
+}
+
 
 /* See pseudo-code in sr_arpcache.h */
 void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   /* TODO: Fill this in */
-  /* Give structure to raw IP packet*/
-  struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
+   
+}
+/* Given an ARP packet, decides what to do based on 
+   whether it is a request or reply */
+void handle_ARP(struct sr_instance* sr,
+        uint8_t * packet/* lent */,
+        unsigned int len,
+        char* interface/* lent */){
+  /* Give structure to raw ARP packet */
+  struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)packet;
 
-  if (dstMatches()) {
+  /* check if request or reply */
+  if (/**/) {
 
   }
 }
@@ -92,8 +113,8 @@ void handle_IP(struct sr_instance* sr,
   } else {
     IP_forward(sr, packet, len, interface);
   }
-
 }
+/* End of helper functions... */
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -157,9 +178,7 @@ void sr_handlepacket(struct sr_instance* sr,
   sr_ethernet_hrd_t* eth_hdr = (sr_ethernet_hrd_t*)packet;
 
   if (ntohs(ethernetHdr->ether_type) == ethertype_arp) {
-    if (dstMatches(sr, packet, interface)) {
-      handle_arpreq(sr, packet);      
-    }
+    handle_arp(sr, arp_hdr);  
   } else if (ntohs(ethernetHdr->ether_type) == ethertype_ip) {
     handle_IP(sr, packet, len, interface);
   } else {
