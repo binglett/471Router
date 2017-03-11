@@ -28,11 +28,6 @@
 
 /* TODO: Add helper functions here... */
 
-/* See pseudo-code in sr_arpcache.h */
-void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
-  /* TODO: Fill this in */
-  
-}
 
 void ICMP_sendUnreachable(struct sr_instance* sr,
           uint8_t* packet,
@@ -48,33 +43,55 @@ void ICMP_sendEcho(struct sr_instance* sr,
 
 }
 
-/* Returns 1 if destination is this router, 0 if not*/
-int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+void IP_forward(struct sr_instance* sr,
+          uint8_t* packet,
+          unsigned int len,
+          char* interface) {
 
 }
 
+/* Returns 1 if destination of packet matches router IP, 0 if not*/
+int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+    /* get IP of interface that received packet*/
+    struct sr_if* incoming_if = sr_get_interface(sr, interface);
+    /* get destination IP */
+    struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
+
+    if (incoming_if->ip == arp_hdr->art_ip) {
+      return 1;
+    } 
+    return 0;
+}
+
+/* See pseudo-code in sr_arpcache.h */
+void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
+  /* TODO: Fill this in */
+  /* Give structure to raw IP packet*/
+  struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
+
+  if (dstMatches()) {
+
+  }
+}
+
 /* Given an IP packet, decides what to do based on 
-   whether it is for our router or not:
-   - for this router
-   - for another router */
-void handle_ip(struct sr_instance* sr,
+   whether it is for our router or not */
+void handle_IP(struct sr_instance* sr,
         uint8_t * packet/* lent */,
         unsigned int len,
         char* interface/* lent */){
   /* Give structure to raw IP packet*/
   struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
 
-  if (dstMatches) {
+  if (dstMatches(sr, packet, interface)) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
       ICMP_sendEcho(sr, packet, len, interface);
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
       ICMP_sendUnreachable(sr, packet, len, interface);
     }    
   } else {
-    /* handle IP forwarding*/
+    IP_forward(sr, packet, len, interface);
   }
-
-
 
 }
 
@@ -140,9 +157,11 @@ void sr_handlepacket(struct sr_instance* sr,
   sr_ethernet_hrd_t* eth_hdr = (sr_ethernet_hrd_t*)packet;
 
   if (ntohs(ethernetHdr->ether_type) == ethertype_arp) {
-    handle_arpreq(sr, packet);
+    if (dstMatches(sr, packet, interface)) {
+      handle_arpreq(sr, packet);      
+    }
   } else if (ntohs(ethernetHdr->ether_type) == ethertype_ip) {
-    handle_ip(sr, packet, len, interface);
+    handle_IP(sr, packet, len, interface);
   } else {
     /* ??? neither arp nor IP exception? */
   }
