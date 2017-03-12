@@ -55,18 +55,18 @@ int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
   /* get IP of interface that received packet*/
   struct sr_if* incoming_if = sr_get_interface(sr, interface);
   /* get destination IP */
-  struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
+  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
 
-  if (incoming_if->ip == arp_hdr->art_ip) {
+  if (incoming_if->ip == arp_hdr->ar_tip) {
     return 1;
   } 
   return 0;
 }
 int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
   /* get UP of interface that received packet */ 
-  struct sr_if* incoming_if = sr_get_interface(sr, interface);
+  struct sr_if *incoming_if = sr_get_interface(sr, interface);
   /* get destination IP */
-  struct sr_ip_hdr_t* ip_hdr = (sr_ip_hdr_t*)(sizeof(sr_ethernet_hdr_t) + packet);
+  sr_ip_hdr_t* ip_hdr = (struct sr_ip_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
 
   if (incoming_if->ip == ip_hdr->ip_dst) {
     return 1;
@@ -87,11 +87,19 @@ void handle_ARP(struct sr_instance* sr,
         unsigned int len,
         char* interface/* lent */){
   /* Give structure to raw ARP packet */
-  struct sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)packet;
+  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)packet;
+  struct in_addr requested, replied;
 
-  /* check if request or reply */
-  if (/**/) {
+  /* if ARP is request, check list of interfaces to see if have the 
+     the MAC addr of request IP and send reply if we have it */
+  if (ntohs(arp_hdr->ar_op) == arp_op_request) {
+    requested.s_addr = arp_hdr->ar_tip;
+    fprintf(stdout, "-> ARP Request: who has %s?\n", inet_ntoa(requested));
+  } 
 
+  if(ntohs(arp_hdr->ar_op) == arp_op_reply) {
+    replied.s_addr = arp_hdr->ar_sip;
+    printf("-> ARP Reply: %s is at ", inet_ntoa(replied));
   }
 }
 
@@ -102,9 +110,9 @@ void handle_IP(struct sr_instance* sr,
         unsigned int len,
         char* interface/* lent */){
   /* Give structure to raw IP packet*/
-  struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
+  struct sr_ip_hdr* ip_hdr = (struct sr_ip_hdr*)packet;
 
-  if (dstMatches(sr, packet, interface)) {
+  if (IP_dstMatches(sr, packet, interface)) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
       ICMP_sendEcho(sr, packet, len, interface);
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
@@ -175,11 +183,11 @@ void sr_handlepacket(struct sr_instance* sr,
 
   /* TODO: Add forwarding logic here */
   /* Give structure to raw ethernet packet */
-  sr_ethernet_hrd_t* eth_hdr = (sr_ethernet_hrd_t*)packet;
+  sr_ethernet_hdr_t* eth_hdr = (struct sr_ethernet_hdr*)packet;
 
-  if (ntohs(ethernetHdr->ether_type) == ethertype_arp) {
-    handle_arp(sr, arp_hdr);  
-  } else if (ntohs(ethernetHdr->ether_type) == ethertype_ip) {
+  if (ntohs(eth_hdr->ether_type) == ethertype_arp) {
+    handle_ARP(sr, packet, len, interface);
+  } else if (ntohs(eth_hdr->ether_type) == ethertype_ip) {
     handle_IP(sr, packet, len, interface);
   } else {
     /* ??? neither arp nor IP exception? */

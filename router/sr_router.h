@@ -68,6 +68,14 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
+/* -- sr_router.c helper functions --*/
+void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface);
+int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface);
+void handle_ARP(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void handle_IP(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
