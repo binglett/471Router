@@ -25,30 +25,54 @@
 #include "sr_utils.h"
 
 /* TODO: Add constant definitions here... */
-
+struct sr_arpentry arpCache[SR_ARPCACHE_SZ];
 /* TODO: Add helper functions here... */
 
+void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
+  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
+  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
+  struct in_addr replied;
 
-void ICMP_sendUnreachable(struct sr_instance* sr,
-          uint8_t* packet,
-          unsigned int len,
-          char* interface) {
-
-}
-
-void ICMP_sendEcho(struct sr_instance* sr,
-          uint8_t* packet,
-          unsigned int len,
-          char* interface) {
+  /* get MAC */
 
 }
 
-void IP_forward(struct sr_instance* sr,
-          uint8_t* packet,
-          unsigned int len,
-          char* interface) {
+void ARP_makePacket(struct sr_arphdr* arp_hdr,
+    unsigned short  ar_hrd,            /* format of hardware address   */
+    unsigned short  ar_pro,             /* format of protocol address   */
+    unsigned char   ar_hln,             /* length of hardware address   */
+    unsigned char   ar_pln,             /* length of protocol address   */
+    unsigned short  ar_op,             /* ARP opcode (command)         */
+    unsigned char   ar_sha[ETHER_ADDR_LEN],  /* sender hardware address      */
+    uint32_t        ar_sip,            /* sender IP address            */
+    unsigned char   ar_tha[ETHER_ADDR_LEN],   /* target hardware address      */
+    uint32_t        ar_tip ) {            /* target IP address   */
+    int i = 0;
+    arp_hdr->ar_hrd = arp_hrd;
+    arp_hdr->ar_pro = arp_pro;
+    arp_hdr->ar_hln = arp_hln;
+    arp_hdr->ar_pln = arp_pln;
+    arp_hdr->ar_op = arp_op;
+    arp_hdr->ar_sip = sbuf; 
+    arp_hdr->ar_tip = tbuf;
+    for (i; i < ETHER_ADDR_LEN; i++) {
+      arp_hdr->ar_sha[i] = ar_sha[i];
+      arp_hdr->ar_tha[i] = ar_tha[i];
+    }
+}
+
+void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
 
 }
+
+void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+}
+
+void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+}
+
 
 /* Returns 1 if destination of packet matches router IP, 0 if not*/
 int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
@@ -87,19 +111,51 @@ void handle_ARP(struct sr_instance* sr,
         unsigned int len,
         char* interface/* lent */){
   /* Give structure to raw ARP packet */
-  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)packet;
+  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
   struct in_addr requested, replied;
+  struct sr_if* ifptr = sr->if_list;
+  int i = 0; /* for looping thorugh waiting IP packets */
+
+  fprintf(stdout, "My interfaces: \n");
+  sr_print_if_list(sr);
 
   /* if ARP is request, check list of interfaces to see if have the 
      the MAC addr of request IP and send reply if we have it */
   if (ntohs(arp_hdr->ar_op) == arp_op_request) {
     requested.s_addr = arp_hdr->ar_tip;
     fprintf(stdout, "-> ARP Request: who has %s?\n", inet_ntoa(requested));
+    /* Check if has it in its table */
+    while (ifptr) {
+      /* Has in its table, so send reply */
+      if (ifptr->ip == requested.s_addr) {     
+        fprintf(stdout, "HWaddr to send: %s\n", ifptr->name);
+        ARP_sendReply(sr, packet, len, interface, ifptr);
+        return;
+      } else {
+        ifptr = ifptr->next;
+      }
+    }
+
+    if (!ifptr) {
+      printf("-> ARP Request: we do not have %s\n", inet_ntoa(requested));
+    }    
   } 
 
-  if(ntohs(arp_hdr->ar_op) == arp_op_reply) {
+  if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
     replied.s_addr = arp_hdr->ar_sip;
+
     printf("-> ARP Reply: %s is at ", inet_ntoa(replied));
+
+    /* Cache the reply */
+    ARP_cacheEntry(arp_hdr);
+
+    /* Forward waiting IP packets */
+    for (i = 0; i < SR_ARPCACHE_SZ; i++) {
+      if (arpCache[i].valid == 1) {
+        checkWaitingPackets(sr, i);
+      }
+    }
+
   }
 }
 
@@ -184,13 +240,18 @@ void sr_handlepacket(struct sr_instance* sr,
   /* TODO: Add forwarding logic here */
   /* Give structure to raw ethernet packet */
   sr_ethernet_hdr_t* eth_hdr = (struct sr_ethernet_hdr*)packet;
+  print_hdrs(packet, len);
+  print_hdr_eth(packet);
 
   if (ntohs(eth_hdr->ether_type) == ethertype_arp) {
+    printf("=== sr_router::sr_handlePacket::Recieved ARP packet.\n");    
     handle_ARP(sr, packet, len, interface);
   } else if (ntohs(eth_hdr->ether_type) == ethertype_ip) {
     handle_IP(sr, packet, len, interface);
+    printf("=== sr_router::sr_handlePacket::Recieved IP packet.\n");
   } else {
     /* ??? neither arp nor IP exception? */
+    printf("=== sr_router::sr_handlePacket::Neither IP nor ARP!\n");
   }
   
 
