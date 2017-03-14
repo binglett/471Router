@@ -70,6 +70,12 @@ void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 /* -- sr_router.c helper functions --*/
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr);
+void ARP_cacheEntry(struct sr_arp_hdr* arp_hdr);
+void ETH_makePacket(struct sr_ethernet_hdr* eth_hdr, uint16_t type, uint8_t* src, uint8_t* dst);
+void ARP_makePacket(struct sr_arp_hdr* arp_hdr, unsigned short ar_hdr, unsigned short ar_pro, unsigned char ar_hln, 
+        unsigned char ar_pln, unsigned short ar_op, unsigned char ar_sha[ETHER_ADDR_LEN], uint32_t ar_sip, 
+        unsigned char at_tha[ETHER_ADDR_LEN], uint32_t ar_tip);
+void checkandSendWaitingPackets(struct sr_instance* sr, int i);
 void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);

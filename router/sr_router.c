@@ -26,18 +26,46 @@
 
 /* TODO: Add constant definitions here... */
 struct sr_arpentry arpCache[SR_ARPCACHE_SZ];
+/* broadcast_eth_addr */
 /* TODO: Add helper functions here... */
 
+/* ARP request was for our router, send a reply with the requested
+   MAC address corresponding to the given interface */
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
   struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
-  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
-  struct in_addr replied;
+  /* create ARP header */
+  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
 
-  /* get MAC */
+  /* create ARP packet by modifying the recieved packet */
+  ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_request), 
+    sr_get_interface(sr, interface)->addr, sr_get_interface(sr, interface)->ip, arp_hdr->ar_sha, 
+    arp_hdr->ar_sip);
+  /* create ethernet packet to send back to sender */
+  ETH_makePacket(eth_hdr, ethertype_arp, ifptr->addr, eth_hdr->ether_shost);
+  
+  /* send created ethernet wrapped arp reply packet */
+  sr_send_packet(sr, packet, len, interface);
 
 }
 
-void ARP_makePacket(struct sr_arphdr* arp_hdr,
+/* caches an ARP reply*/
+void ARP_cacheEntry(struct sr_arp_hdr* arp_hdr) {
+
+}
+
+/* creates an ethernet packet  */
+void ETH_makePacket(struct sr_ethernet_hdr* eth_hdr, uint16_t type, uint8_t* src, uint8_t* dst) {
+  int i;  
+
+  eth_hdr->ether_type = htons(type);
+  for (i = 0; i < ETHER_ADDR_LEN; i++) {
+      eth_hdr->ether_shost[i] = src[i];
+      eth_hdr->ether_dhost[i] = dst[i];
+  }
+}
+
+/* Given a new ARP header, fill it with its contents */
+void ARP_makePacket(struct sr_arp_hdr* arp_hdr,
     unsigned short  ar_hrd,            /* format of hardware address   */
     unsigned short  ar_pro,             /* format of protocol address   */
     unsigned char   ar_hln,             /* length of hardware address   */
@@ -48,27 +76,34 @@ void ARP_makePacket(struct sr_arphdr* arp_hdr,
     unsigned char   ar_tha[ETHER_ADDR_LEN],   /* target hardware address      */
     uint32_t        ar_tip ) {            /* target IP address   */
     int i = 0;
-    arp_hdr->ar_hrd = arp_hrd;
-    arp_hdr->ar_pro = arp_pro;
-    arp_hdr->ar_hln = arp_hln;
-    arp_hdr->ar_pln = arp_pln;
-    arp_hdr->ar_op = arp_op;
-    arp_hdr->ar_sip = sbuf; 
-    arp_hdr->ar_tip = tbuf;
-    for (i; i < ETHER_ADDR_LEN; i++) {
+    arp_hdr->ar_hrd = ar_hrd;
+    arp_hdr->ar_pro = ar_pro;
+    arp_hdr->ar_hln = ar_hln;
+    arp_hdr->ar_pln = ar_pln;
+    arp_hdr->ar_op = ar_op;
+    arp_hdr->ar_sip = ar_sip; 
+    arp_hdr->ar_tip = ar_tip;
+    for (i = 0; i < ETHER_ADDR_LEN; i++) {
       arp_hdr->ar_sha[i] = ar_sha[i];
       arp_hdr->ar_tha[i] = ar_tha[i];
     }
 }
 
+/* loop though IP packetse waiting on an ARP reply */
+void checkandSendWaitingPackets(struct sr_instance* sr, int i) {
+
+}
+
+/* Packet was for us but contained TCP/UDP, send unreachable to sender */
 void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
 
 }
 
+/* Packet was for this router so send an ICMP echo to sender */
 void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
 
 }
-
+/* Handles the forwarding of an IP packet destined elsewhere */
 void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
 
 }
@@ -152,7 +187,7 @@ void handle_ARP(struct sr_instance* sr,
     /* Forward waiting IP packets */
     for (i = 0; i < SR_ARPCACHE_SZ; i++) {
       if (arpCache[i].valid == 1) {
-        checkWaitingPackets(sr, i);
+        checkandSendWaitingPackets(sr, i);
       }
     }
 
@@ -168,13 +203,19 @@ void handle_IP(struct sr_instance* sr,
   /* Give structure to raw IP packet*/
   struct sr_ip_hdr* ip_hdr = (struct sr_ip_hdr*)packet;
 
+  /* Is for our router */
   if (IP_dstMatches(sr, packet, interface)) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
       ICMP_sendEcho(sr, packet, len, interface);
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
       ICMP_sendUnreachable(sr, packet, len, interface);
-    }    
-  } else {
+    } else {
+      /* ignore anything else */
+      return;
+    }   
+  } 
+  /* Not for our router */
+  else {
     IP_forward(sr, packet, len, interface);
   }
 }
