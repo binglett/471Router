@@ -25,58 +25,201 @@
 #include "sr_utils.h"
 
 /* TODO: Add constant definitions here... */
-
+struct sr_arpentry arpCache[SR_ARPCACHE_SZ];
+/* broadcast_eth_addr */
 /* TODO: Add helper functions here... */
+
+/* ARP request was for our router, send a reply with the requested
+   MAC address corresponding to the given interface */
+void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
+  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
+  /* create ARP header */
+  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
+
+  /* create ARP packet by modifying the recieved packet */
+  ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_request), 
+    sr_get_interface(sr, interface)->addr, sr_get_interface(sr, interface)->ip, arp_hdr->ar_sha, 
+    arp_hdr->ar_sip);
+  /* create ethernet packet to send back to sender */
+  ETH_makePacket(eth_hdr, ethertype_arp, ifptr->addr, eth_hdr->ether_shost);
+  
+  /* send created ethernet wrapped arp reply packet */
+  sr_send_packet(sr, packet, len, interface);
+
+}
+
+/* caches an ARP reply*/
+void ARP_cacheEntry(struct sr_arp_hdr* arp_hdr) {
+
+}
+
+/* creates an ethernet packet  */
+void ETH_makePacket(struct sr_ethernet_hdr* eth_hdr, uint16_t type, uint8_t* src, uint8_t* dst) {
+  int i;  
+
+  eth_hdr->ether_type = htons(type);
+  for (i = 0; i < ETHER_ADDR_LEN; i++) {
+      eth_hdr->ether_shost[i] = src[i];
+      eth_hdr->ether_dhost[i] = dst[i];
+  }
+}
+
+/* Given a new ARP header, fill it with its contents */
+void ARP_makePacket(struct sr_arp_hdr* arp_hdr,
+    unsigned short  ar_hrd,            /* format of hardware address   */
+    unsigned short  ar_pro,             /* format of protocol address   */
+    unsigned char   ar_hln,             /* length of hardware address   */
+    unsigned char   ar_pln,             /* length of protocol address   */
+    unsigned short  ar_op,             /* ARP opcode (command)         */
+    unsigned char   ar_sha[ETHER_ADDR_LEN],  /* sender hardware address      */
+    uint32_t        ar_sip,            /* sender IP address            */
+    unsigned char   ar_tha[ETHER_ADDR_LEN],   /* target hardware address      */
+    uint32_t        ar_tip ) {            /* target IP address   */
+    int i = 0;
+    arp_hdr->ar_hrd = ar_hrd;
+    arp_hdr->ar_pro = ar_pro;
+    arp_hdr->ar_hln = ar_hln;
+    arp_hdr->ar_pln = ar_pln;
+    arp_hdr->ar_op = ar_op;
+    arp_hdr->ar_sip = ar_sip; 
+    arp_hdr->ar_tip = ar_tip;
+    for (i = 0; i < ETHER_ADDR_LEN; i++) {
+      arp_hdr->ar_sha[i] = ar_sha[i];
+      arp_hdr->ar_tha[i] = ar_tha[i];
+    }
+}
+
+/* loop though IP packetse waiting on an ARP reply */
+void checkandSendWaitingPackets(struct sr_instance* sr, int i) {
+
+}
+
+/* Packet was for us but contained TCP/UDP, send unreachable to sender */
+void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+}
+
+/* Packet was for this router so send an ICMP echo to sender */
+void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+}
+/* Handles the forwarding of an IP packet destined elsewhere */
+void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+}
+
+
+/* Returns 1 if destination of packet matches router IP, 0 if not*/
+int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+  /* get IP of interface that received packet*/
+  struct sr_if* incoming_if = sr_get_interface(sr, interface);
+  /* get destination IP */
+  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
+
+  if (incoming_if->ip == arp_hdr->ar_tip) {
+    return 1;
+  } 
+  return 0;
+}
+int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+  /* get UP of interface that received packet */ 
+  struct sr_if *incoming_if = sr_get_interface(sr, interface);
+  /* get destination IP */
+  sr_ip_hdr_t* ip_hdr = (struct sr_ip_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
+
+  if (incoming_if->ip == ip_hdr->ip_dst) {
+    return 1;
+  }
+  return 0;
+}
+
 
 /* See pseudo-code in sr_arpcache.h */
 void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   /* TODO: Fill this in */
-  
+   
 }
+/* Given an ARP packet, decides what to do based on 
+   whether it is a request or reply */
+void handle_ARP(struct sr_instance* sr,
+        uint8_t * packet/* lent */,
+        unsigned int len,
+        char* interface/* lent */){
+  /* Give structure to raw ARP packet */
+  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
+  struct in_addr requested, replied;
+  struct sr_if* ifptr = sr->if_list;
+  int i = 0; /* for looping thorugh waiting IP packets */
 
-void ICMP_sendUnreachable(struct sr_instance* sr,
-          uint8_t* packet,
-          unsigned int len,
-          char* interface) {
+  fprintf(stdout, "My interfaces: \n");
+  sr_print_if_list(sr);
 
-}
+  /* if ARP is request, check list of interfaces to see if have the 
+     the MAC addr of request IP and send reply if we have it */
+  if (ntohs(arp_hdr->ar_op) == arp_op_request) {
+    requested.s_addr = arp_hdr->ar_tip;
+    fprintf(stdout, "-> ARP Request: who has %s?\n", inet_ntoa(requested));
+    /* Check if has it in its table */
+    while (ifptr) {
+      /* Has in its table, so send reply */
+      if (ifptr->ip == requested.s_addr) {     
+        fprintf(stdout, "HWaddr to send: %s\n", ifptr->name);
+        ARP_sendReply(sr, packet, len, interface, ifptr);
+        return;
+      } else {
+        ifptr = ifptr->next;
+      }
+    }
 
-void ICMP_sendEcho(struct sr_instance* sr,
-          uint8_t* packet,
-          unsigned int len,
-          char* interface) {
+    if (!ifptr) {
+      printf("-> ARP Request: we do not have %s\n", inet_ntoa(requested));
+    }    
+  } 
 
-}
+  if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
+    replied.s_addr = arp_hdr->ar_sip;
 
-/* Returns 1 if destination is this router, 0 if not*/
-int dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
+    printf("-> ARP Reply: %s is at ", inet_ntoa(replied));
 
+    /* Cache the reply */
+    ARP_cacheEntry(arp_hdr);
+
+    /* Forward waiting IP packets */
+    for (i = 0; i < SR_ARPCACHE_SZ; i++) {
+      if (arpCache[i].valid == 1) {
+        checkandSendWaitingPackets(sr, i);
+      }
+    }
+
+  }
 }
 
 /* Given an IP packet, decides what to do based on 
-   whether it is for our router or not:
-   - for this router
-   - for another router */
-void handle_ip(struct sr_instance* sr,
+   whether it is for our router or not */
+void handle_IP(struct sr_instance* sr,
         uint8_t * packet/* lent */,
         unsigned int len,
         char* interface/* lent */){
   /* Give structure to raw IP packet*/
-  struct sr_ip_hdr* ip_hdr = (sr_ip_hdr*)packet;
+  struct sr_ip_hdr* ip_hdr = (struct sr_ip_hdr*)packet;
 
-  if (dstMatches) {
+  /* Is for our router */
+  if (IP_dstMatches(sr, packet, interface)) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
       ICMP_sendEcho(sr, packet, len, interface);
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
       ICMP_sendUnreachable(sr, packet, len, interface);
-    }    
-  } else {
-    /* handle IP forwarding*/
+    } else {
+      /* ignore anything else */
+      return;
+    }   
+  } 
+  /* Not for our router */
+  else {
+    IP_forward(sr, packet, len, interface);
   }
-
-
-
 }
+/* End of helper functions... */
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -137,14 +280,19 @@ void sr_handlepacket(struct sr_instance* sr,
 
   /* TODO: Add forwarding logic here */
   /* Give structure to raw ethernet packet */
-  sr_ethernet_hrd_t* eth_hdr = (sr_ethernet_hrd_t*)packet;
+  sr_ethernet_hdr_t* eth_hdr = (struct sr_ethernet_hdr*)packet;
+  print_hdrs(packet, len);
+  print_hdr_eth(packet);
 
-  if (ntohs(ethernetHdr->ether_type) == ethertype_arp) {
-    handle_arpreq(sr, packet);
-  } else if (ntohs(ethernetHdr->ether_type) == ethertype_ip) {
-    handle_ip(sr, packet, len, interface);
+  if (ntohs(eth_hdr->ether_type) == ethertype_arp) {
+    printf("=== sr_router::sr_handlePacket::Recieved ARP packet.\n");    
+    handle_ARP(sr, packet, len, interface);
+  } else if (ntohs(eth_hdr->ether_type) == ethertype_ip) {
+    handle_IP(sr, packet, len, interface);
+    printf("=== sr_router::sr_handlePacket::Recieved IP packet.\n");
   } else {
     /* ??? neither arp nor IP exception? */
+    printf("=== sr_router::sr_handlePacket::Neither IP nor ARP!\n");
   }
   
 
