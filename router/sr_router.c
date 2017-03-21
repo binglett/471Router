@@ -25,7 +25,6 @@
 #include "sr_utils.h"
 
 /* TODO: Add constant definitions here... */
-struct sr_arpentry arpCache[SR_ARPCACHE_SZ];
 /* broadcast_eth_addr */
 /* TODO: Add helper functions here... */
 
@@ -34,10 +33,12 @@ struct sr_arpentry arpCache[SR_ARPCACHE_SZ];
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
   struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
   /* create ARP header */
-  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
+  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)cu;
+        /* create ARP header */
+        struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
 
   /* create ARP packet by modifying the recieved packet */
-  ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_request), 
+  ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_reply), 
     sr_get_interface(sr, interface)->addr, sr_get_interface(sr, interface)->ip, arp_hdr->ar_sha, 
     arp_hdr->ar_sip);
   /* create ethernet packet to send back to sender */
@@ -48,19 +49,26 @@ void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
 
 }
 
-/* caches an ARP reply*/
-void ARP_cacheEntry(struct sr_arp_hdr* arp_hdr) {
-
+/* places the given arp reply into the arp cache in sr instance*/
+void ARP_cacheEntry(struct sr_instance* sr, struct sr_arp_hdr* arp_hdr) {
+  /*sr instance has the arp cache*/
+  sr_arpcache_insert(&(sr->cache), arp_hdr->ar_tha, arp_hdr->ar_tip);
 }
 
 /* creates an ethernet packet  */
 void ETH_makePacket(struct sr_ethernet_hdr* eth_hdr, uint16_t type, uint8_t* src, uint8_t* dst) {
   int i;  
+  uint8_t sbuf[ETHER_ADDR_LEN], dbuf[ETHER_ADDR_LEN];
+  
+  for (i = 0; i < ETHER_ADDR_LEN; i++) {
+      sbuf[i] = src[i];
+      dbuf[i] = dst[i];
+  }
 
   eth_hdr->ether_type = htons(type);
   for (i = 0; i < ETHER_ADDR_LEN; i++) {
-      eth_hdr->ether_shost[i] = src[i];
-      eth_hdr->ether_dhost[i] = dst[i];
+      eth_hdr->ether_shost[i] = sbuf[i];
+      eth_hdr->ether_dhost[i] = dbuf[i];
   }
 }
 
@@ -76,22 +84,59 @@ void ARP_makePacket(struct sr_arp_hdr* arp_hdr,
     unsigned char   ar_tha[ETHER_ADDR_LEN],   /* target hardware address      */
     uint32_t        ar_tip ) {            /* target IP address   */
     int i = 0;
+    uint32_t sbuf, tbuf;
+    uint8_t shabuf[ETHER_ADDR_LEN], thabuf[ETHER_ADDR_LEN];
+    
     arp_hdr->ar_hrd = ar_hrd;
     arp_hdr->ar_pro = ar_pro;
     arp_hdr->ar_hln = ar_hln;
     arp_hdr->ar_pln = ar_pln;
     arp_hdr->ar_op = ar_op;
-    arp_hdr->ar_sip = ar_sip; 
-    arp_hdr->ar_tip = ar_tip;
+    sbuf = ar_sip;
+    tbuf = ar_tip;
+    arp_hdr->ar_sip = sbuf; 
+    arp_hdr->ar_tip = tbuf;
+
     for (i = 0; i < ETHER_ADDR_LEN; i++) {
-      arp_hdr->ar_sha[i] = ar_sha[i];
-      arp_hdr->ar_tha[i] = ar_tha[i];
+        shabuf[i] = ar_sha[i];
+        thabuf[i] = ar_tha[i];
+    }
+
+    for (i = 0; i < ETHER_ADDR_LEN; i++) {
+      arp_hdr->ar_sha[i] = shabuf[i];
+      arp_hdr->ar_tha[i] = thabuf[i];
     }
 }
 
-/* loop though IP packetse waiting on an ARP reply */
-void checkandSendWaitingPackets(struct sr_instance* sr, int i) {
+/* check all the cached ARP requests and send out the ones that match IP */
+void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
+  ar_arpentry newEntry = sr->cache.entries[cacheEntryIndex];
+  sr_arpreq* currentReq = sr->cache->requests;
 
+  /* check all the packets on each request against new entry*/
+  while (currentReq != NULL) {
+    if (currentReq.ip == newEntry.ip) {
+      sr_packet currentPack = currentReq->packets;
+      while (currentPack != NULL) {
+        /* cast buffer into an ARP packet */
+        struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)currentPack->buf;
+        /* create ARP header */
+        struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(eth_hdr + sizeof(sr_ethernet_hdr_t));  
+        uint8_t thabuf[ETHER_ADDR_LEN];
+        for (i = 0; i < ETHER_ADDR_LEN; i++) {
+          thabuf[i] = newEntry.mac[i];
+        }
+        for (i = 0; i < ETHER_ADDR_LEN; i++) {
+          arp_hdr->ar_tha[i] = thabuf[i];
+        }
+        /* !!! do I need to make packet again?*/
+        sr_send_packet(sr, currentPack->buf, currentPack.len, currentPack->iface);
+        currentPack = currentPack->next;
+      }
+    }
+    sr_arpreq_destroy(sr->cache, currentReq);
+    currentReq = currentReq->next;
+  } 
 }
 
 /* Packet was for us but contained TCP/UDP, send unreachable to sender */
@@ -137,7 +182,16 @@ int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
 /* See pseudo-code in sr_arpcache.h */
 void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   /* TODO: Fill this in */
-   
+   if difftime(now, req->sent) > 1.0
+           if req->times_sent >= 5:
+               send icmp host unreachable to source addr of all pkts waiting
+                 on this request
+               arpreq_destroy(req)
+           else:
+               send arp request
+               req->sent = now
+               req->times_sent++
+
 }
 /* Given an ARP packet, decides what to do based on 
    whether it is a request or reply */
@@ -182,11 +236,11 @@ void handle_ARP(struct sr_instance* sr,
     printf("-> ARP Reply: %s is at ", inet_ntoa(replied));
 
     /* Cache the reply */
-    ARP_cacheEntry(arp_hdr);
+    ARP_cacheEntry(sr, arp_hdr);
 
-    /* Forward waiting IP packets */
+    /* Send out queued request packets */
     for (i = 0; i < SR_ARPCACHE_SZ; i++) {
-      if (arpCache[i].valid == 1) {
+      if (sr->cache.entries[i].valid == 1) {
         checkandSendWaitingPackets(sr, i);
       }
     }
