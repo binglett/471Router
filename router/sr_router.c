@@ -223,14 +223,14 @@ fprintf(stderr, "ICMP send echo, type 0\n");
  /*  struct sr_icmp_hdr outPacket; */
   
   sr_icmp_hdr_t* icmpHeader;
-  /*sr_ip_hdr_t* error_ip_header_ptr; */
+  sr_ip_hdr_t* icmpErrorHeader;
   sr_ip_hdr_t* echoIPHeader;
   
-  /*struct sr_rt* rt; */
+  struct sr_rt* rt;
   interface = (struct sr_if*)interface;
   uint16_t icmpSize; 
   uint16_t totalSize;
-  uint8_t* new_ip_packet;
+  uint8_t* newPacket;
   uint8_t* new_ip_packet_ptr;
   uint32_t ip_dst;
   
@@ -240,7 +240,7 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   echoIPHeader->ip_src = echoIPHeader->ip_dst;
   echoIPHeader->ip_dst = ip_dst;
   
-  /* modify data in icmp packet */
+  /* get ICMP Header location */
   uint8_t* icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
   icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
   icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
@@ -250,13 +250,13 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   icmpHeader->icmp_code = 0;
   icmpHeader->icmp_sum = 0;
   
-  /* make a copy */
+  /* get length of ip header and create a new packet */
   totalSize = ntohs(echoIPHeader->ip_len);
   icmpSize = totalSize - IP_HEADER_MIN_LEN;
-  new_ip_packet = malloc(totalSize);
-  memcpy(new_ip_packet,echoIPHeader,totalSize);
+  newPacket = malloc(totalSize);
+  memcpy(newPacket,echoIPHeader,totalSize);
 
-   /* checksum icmp */
+   /* Compute checksum */
   icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
   icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
   icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
@@ -325,7 +325,6 @@ void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char*
   ipHeader->ip_sum = actualChecksum;
   
 
-
   
   /* packet passed all checks...continue with forwarding packet */
   fprintf(stderr, "Sanity checks passed, forwarding IP packet\n");
@@ -348,6 +347,13 @@ void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char*
      using any incoming interface as source address*/
     fprintf(stderr, "TTL = 0, sending ICMP time exceeded (type 11, code 0)\n");
 
+    return;
+  }
+  
+  /* Check protocol version, 4 for ipv4, 6 for ipv6 */
+  if ( ipHeader->ip_v != 4 )
+  {
+    fprintf(stderr, "Packet protocol not ipv4\n");
     return;
   }
   
