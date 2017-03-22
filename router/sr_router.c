@@ -439,18 +439,12 @@ void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
       sr_arpreq_destroy(&(sr->cache), req);
     } else {
       /* TODO: get interface */
-      /*struct sr_if* ifptr = sr->if_list;
+      struct sr_if* ifptr = sr->if_list;
       while (ifptr) {
-        if (ifptr->ip == requested.s_addr) {     
-          return;
-        } else {
-          ifptr = ifptr->next;
-        }
+        ARP_sendRequest(sr, ifptr, req);
+        ifptr = ifptr->next;
       }
-      */
-      struct sr_if* interface;
       /* !!! send arp request */
-      ARP_sendRequest(sr, interface, req);
       req->sent = time(NULL);
       req->times_sent++;
     }
