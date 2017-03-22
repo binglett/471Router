@@ -92,7 +92,6 @@ void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
   fprintf(stdout, "========printing router reply\n");
   print_hdrs(packet, len);
   sr_send_packet(sr, packet, len, interface);
-
 }
 
 /* creates and sends a broadcast ARP request*/
@@ -121,6 +120,7 @@ void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_
     /* send away */
     print_hdrs(ARPrequest, (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)));
     sr_send_packet(sr, ARPrequest, (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)), interface->name);
+    free(ARPrequest);
 }
 
 /* places the given arp reply into the arp cache in sr instance*/
@@ -204,7 +204,7 @@ void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
         for (i = 0; i < ETHER_ADDR_LEN; i++) {
           arp_hdr->ar_tha[i] = thabuf[i];
         }
-        sr_send_packet(sr, currentPack->buf, currentPack->len, currentPack->iface);
+        sr_send_packet(sr, currentPack->buf, currentPack->len, currentPack->iface);        
         currentPack = currentPack->next;
       }
     }
@@ -424,18 +424,6 @@ void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char*
 }
 
 
-/* Returns 1 if destination of packet matches router IP, 0 if not*/
-int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
-  /* get IP of interface that received packet*/
-  struct sr_if* incoming_if = sr_get_interface(sr, interface);
-  /* get destination IP */
-  sr_arp_hdr_t* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));
-
-  if (incoming_if->ip == arp_hdr->ar_tip) {
-    return 1;
-  } 
-  return 0;
-}
 int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
   /* get UP of interface that received packet */ 
   struct sr_if *incoming_if = sr_get_interface(sr, interface);
