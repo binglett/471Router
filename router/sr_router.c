@@ -286,9 +286,9 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   memcpy(newPacket,echoIPHeader,totalSize);
   
   newPacketHeader = (sr_ip_hdr_t*)(newPacket);
-  uint8_t* newICMPHeader = (uint8_t*)(newPacketHeader)
+  uint8_t* newICMPHeader = (uint8_t*)(newPacketHeader);
   uint8_t newPacketHeaderSize = newPacketHeader->ip_hl << 2;
-  newICMPHeader += newPacketHeader;
+  newICMPHeader = newICMPHeader + newPacketHeaderSize;
   
 
    /* Compute checksum */
