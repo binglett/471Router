@@ -89,6 +89,8 @@ void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
   ETH_makePacket(eth_hdr, ethertype_arp, ifptr->addr, eth_hdr->ether_shost);
   
   /* send created ethernet wrapped arp reply packet */
+  fprintf(stdout, "========printing router reply\n");
+  print_hdrs(packet, len);
   sr_send_packet(sr, packet, len, interface);
 
 }
@@ -99,8 +101,8 @@ void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_
     uint8_t MACbroadcastAddr[ETHER_ADDR_LEN];    
     int i;
     
-    uint8_t* ARPrequest = (uint8_t*) malloc(sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t));
-    memset(ARPrequest, 0, sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t));
+    uint8_t* ARPrequest = (uint8_t*) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    memset(ARPrequest, 0, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
     
     struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)ARPrequest;
     struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(ARPrequest + sizeof(sr_ethernet_hdr_t)); 
@@ -117,7 +119,8 @@ void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_
     ETH_makePacket(eth_hdr, ethertype_arp, interface->addr, MACbroadcastAddr);
 
     /* send away */
-    sr_send_packet(sr, ARPrequest, (sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t)), interface->name);
+    print_hdrs(ARPrequest, (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)));
+    sr_send_packet(sr, ARPrequest, (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)), interface->name);
 }
 
 /* places the given arp reply into the arp cache in sr instance*/
@@ -595,7 +598,7 @@ void sr_handlepacket(struct sr_instance* sr,
   /* Give structure to raw ethernet packet */
   sr_ethernet_hdr_t* eth_hdr = (struct sr_ethernet_hdr*)packet;
   print_hdrs(packet, len);
-  print_hdr_eth(packet);
+  /* print_hdr_eth(packet); */
 
   if (ntohs(eth_hdr->ether_type) == ethertype_arp) {
     printf("=== sr_router::sr_handlePacket::Recieved ARP packet.\n");    
