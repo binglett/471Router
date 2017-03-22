@@ -78,6 +78,12 @@ We made separate ICMP messages for each of the ICMP messages that are to be sent
 by the router.
 
 7. IP forwarding
+We first do sanity checking on the received IP packet to make sure we don't pass 
+along malformed/useless messages along. The checksum is calculated. The target IP
+address is matched with the cached entries of MAC/IP addresses and if there is a
+match, then the rest of the packet is made and we use a longest prefix matching function to check which interface to send the packet along. If there was no match, an entry is 
+added to the arp request cache and the handle_arpreq function is called to deal with 
+broadcasting out arp requests
 
 
 
