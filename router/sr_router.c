@@ -33,9 +33,8 @@
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
   struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
   /* create ARP header */
-  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)cu;
+  struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t)); 
         /* create ARP header */
-        struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t));  
 
   /* create ARP packet by modifying the recieved packet */
   ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_reply), 
@@ -110,13 +109,14 @@ void ARP_makePacket(struct sr_arp_hdr* arp_hdr,
 
 /* check all the cached ARP requests and send out the ones that match IP */
 void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
-  ar_arpentry newEntry = sr->cache.entries[cacheEntryIndex];
-  sr_arpreq* currentReq = sr->cache->requests;
+  struct sr_arpentry newEntry = sr->cache.entries[newArpEntryIndex];
+  struct sr_arpreq* currentReq = sr->cache.requests;
+  int i;
 
   /* check all the packets on each request against new entry*/
   while (currentReq != NULL) {
-    if (currentReq.ip == newEntry.ip) {
-      sr_packet currentPack = currentReq->packets;
+    if (currentReq->ip == newEntry.ip) {
+      struct sr_packet* currentPack = currentReq->packets;
       while (currentPack != NULL) {
         /* cast buffer into an ARP packet */
         struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)currentPack->buf;
@@ -130,11 +130,11 @@ void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
           arp_hdr->ar_tha[i] = thabuf[i];
         }
         /* !!! do I need to make packet again?*/
-        sr_send_packet(sr, currentPack->buf, currentPack.len, currentPack->iface);
+        sr_send_packet(sr, currentPack->buf, currentPack->len, currentPack->iface);
         currentPack = currentPack->next;
       }
     }
-    sr_arpreq_destroy(sr->cache, currentReq);
+    sr_arpreq_destroy(&(sr->cache), currentReq);
     currentReq = currentReq->next;
   } 
 }
@@ -181,7 +181,7 @@ int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
 
 /* See pseudo-code in sr_arpcache.h */
 void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
-  /* TODO: Fill this in */
+  /* TODO: Fill this in 
    if difftime(now, req->sent) > 1.0
            if req->times_sent >= 5:
                send icmp host unreachable to source addr of all pkts waiting
@@ -191,6 +191,7 @@ void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
                send arp request
                req->sent = now
                req->times_sent++
+               */
 
 }
 /* Given an ARP packet, decides what to do based on 
