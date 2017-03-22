@@ -27,6 +27,53 @@
 /* TODO: Add constant definitions here... */
 /* broadcast_eth_addr */
 /* TODO: Add helper functions here... */
+#define IP_HEADER_MIN_LEN 20
+
+
+struct sr_rt* findLongestMatchingPrefix(struct sr_instance* sr, struct in_addr addr)
+{
+  struct sr_rt* longestMatch = 0;
+  unsigned long addressLength = 0;
+  struct sr_rt* currentMatch = sr->routing_table;
+
+  /* go through all entries in routing table, and keep the longest matching address */
+  while (currentMatch != 0) 
+  {
+    if ( (currentMatch->dest.s_addr & currentMatch->mask.s_addr) == (addr.s_addr & currentMatch->mask.s_addr))
+    {
+      /* only update longest prefix match is current address has a longer match */
+      if(addressLength < currentMatch->mask.s_addr)
+      {
+        addressLength = currentMatch->mask.s_addr;
+        longestMatch = currentMatch;
+      }
+    }
+    currentMatch = currentMatch->next;
+   }
+   return longestMatch;
+}
+
+/* Return 1 if ICMP isvalid, 0 otherwise */
+int ICMP_checkValidity(sr_ip_hdr_t* ipHeader)
+{
+  /*Get the ICMP header*/
+  uint8_t* icmpHeaderLocation = (uint8_t*)(ipHeader);	
+  icmpHeaderLocation = icmpHeaderLocation + (ipHeader->ip_hl << 2);
+  sr_icmp_hdr_t* icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
+  
+  unsigned int icmpPacketSize = (ntohs(ipHeader->ip_len) - (ipHeader->ip_hl << 2 ));
+  uint16_t claimedChecksum = icmpHeader->icmp_sum; 
+  uint16_t actualChecksum = cksum(icmpHeader,icmpPacketSize);
+  
+  if (actualChecksum != claimedChecksum)
+  {
+    fprintf(stderr, "ICMP incorrect checksum, dropping\n");
+    return 0;
+  }
+  return 1;
+}
+
+
 
 /* ARP request was for our router, send a reply with the requested
    MAC address corresponding to the given interface */
@@ -140,16 +187,197 @@ void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
 }
 
 /* Packet was for us but contained TCP/UDP, send unreachable to sender */
-void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+void ICMP_sendNetUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+ fprintf(stderr, "ICMP sending net unreachable, type 3 code 0\n");
+}
+
+
+/* Packet was for us but contained TCP/UDP, send unreachable to sender */
+void ICMP_sendPortUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+      fprintf(stderr, "ICMP send port unreachable, type 3 code 3\n");
+/* can use default type here?
+ type 3 code 3 */
 
 }
+
+void ICMP_sendHostUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+      fprintf(stderr, "ICMP send port unreachable, type 3 code 3\n");
+/* can use default type here?
+ type 3 code 3 */
+
+}
+void ICMP_sendTimeExceeded(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+      fprintf(stderr, "ICMP send time exceeded, type 11 code 0\n");
+/* can use default type here?
+ type 3 code 3 */
+
+}
+
 
 /* Packet was for this router so send an ICMP echo to sender */
 void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+fprintf(stderr, "ICMP send echo, type 0\n");
+/* type 0 code ?? */
+ /*  struct sr_icmp_hdr outPacket; */
+  
+  sr_icmp_hdr_t* icmpHeader;
+  /*sr_ip_hdr_t* error_ip_header_ptr; */
+  sr_ip_hdr_t* echoIPHeader;
+  
+  /*struct sr_rt* rt; */
+  interface = (struct sr_if*)interface;
+  uint16_t icmpSize; 
+  uint16_t totalSize;
+  uint8_t* new_ip_packet;
+  uint8_t* new_ip_packet_ptr;
+  uint32_t ip_dst;
+  
+  /* Repurpose packet and send back to sender */
+  echoIPHeader = (sr_ip_hdr_t*)(packet);
+  ip_dst = echoIPHeader->ip_src;
+  echoIPHeader->ip_src = echoIPHeader->ip_dst;
+  echoIPHeader->ip_dst = ip_dst;
+  
+  /* modify data in icmp packet */
+  uint8_t* icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
+  icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
+  icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
 
+  /*icmpHeader = get_icmp_header(echoIPHeader); */
+  icmpHeader->icmp_type = 0;
+  icmpHeader->icmp_code = 0;
+  icmpHeader->icmp_sum = 0;
+  
+  /* make a copy */
+  totalSize = ntohs(echoIPHeader->ip_len);
+  icmpSize = totalSize - IP_HEADER_MIN_LEN;
+  new_ip_packet = malloc(totalSize);
+  memcpy(new_ip_packet,echoIPHeader,totalSize);
+
+   /* checksum icmp */
+  icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
+  icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
+  icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
+
+  /*icmpHeader = get_icmp_header((sr_ip_hdr_t*)new_ip_packet); */
+  icmpHeader->icmp_sum = cksum(icmpHeader,icmpSize);
+  /* ETH make packet
+  send packet */
 }
+
+
+
 /* Handles the forwarding of an IP packet destined elsewhere */
 void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+
+ 	/* Get relevant packet statistics */
+  	/*unsigned int minlengthETH = sizeof(sr_ethernet_hdr_t); */
+  	unsigned int minlengthIP = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t); 
+  	
+  	sr_ip_hdr_t* ipHeader = (sr_ip_hdr_t*)(packet + sizeof(sr_ethernet_hdr_t));
+  	unsigned int ipHeaderSize = ipHeader->ip_hl << 2;
+  	unsigned int ipPacketSize = len - sizeof(sr_ethernet_hdr_t);
+  	uint16_t ipPacketSizeParam = ntohs(ipHeader->ip_len);
+  	
+  	uint16_t checksum = 0;
+
+  /* sanity check ethernet frame size */
+  /* if (len < minlengthETH )
+  {
+      fprintf(stderr, "ETHERNET frame insufficient length\n");
+  } */
+  /* sanity check ip packet size */
+  /*else*/ if (len < minlengthIP)
+  {
+      fprintf(stderr, "IP packet insufficient length\n");
+      return;
+  }
+  /* sanity check ip header size */
+  else if (ipPacketSize < ipHeaderSize)
+  {
+      fprintf(stderr, "IP packet size less than what header claims\n");
+      return;
+  }
+  /* check what IP header claims is correct */
+  else if (ipPacketSize != ipPacketSizeParam)
+  {
+      fprintf(stderr, "IP packet size less than what header claims\n");
+      return;
+  }
+
+  /* make sure checksum is correct*/
+  uint16_t claimedChecksum = 0;
+  uint16_t actualChecksum = 0;
+
+  claimedChecksum = ipHeader->ip_sum;
+  actualChecksum = cksum(ipHeader,ipHeaderSize);
+
+  if ( actualChecksum != claimedChecksum )
+  {
+      fprintf(stderr, "IP packet wrong checksum\n");
+      return;
+  }
+
+  /* make sure we didn't do anything stupid.*/
+  ipHeader->ip_sum = 0;
+  ipHeader->ip_sum = actualChecksum;
+  
+
+
+  
+  /* packet passed all checks...continue with forwarding packet */
+  fprintf(stderr, "Sanity checks passed, forwarding IP packet\n");
+
+  /* is this necassary?  nah*/
+  uint8_t* forwarded_packet;
+  unsigned int forwarded_ipPacketSizeParam = ntohs(ipHeader->ip_len);
+
+  /* Decrement TTL, and if it is 0, send ICMP, otherwise recompute checksum
+    with destination IP, and check ARP for next hop
+  MAC address corresponding to next hopt IP */
+  ipHeader->ip_ttl--;
+  ipHeader->ip_sum = 0;
+  unsigned int forwarded_ipHeaderSize = ipHeader->ip_hl << 2;
+  ipHeader->ip_sum = cksum(ipHeader,forwarded_ipHeaderSize);
+
+  if ( ipHeader->ip_ttl == 0 )
+  {
+    /* send ICMP TTL exceeded, type 11, code 0 
+     using any incoming interface as source address*/
+    fprintf(stderr, "TTL = 0, sending ICMP time exceeded (type 11, code 0)\n");
+
+    return;
+  }
+  
+  forwarded_packet = malloc(forwarded_ipPacketSizeParam);
+  memcpy(forwarded_packet, ipHeader, ipPacketSizeParam);
+  
+  /* send packet. 
+  First find if there is a longest prefix match for destination, 
+  if not send ICMP net unreachable type 3 code 0. */
+  struct in_addr destination;
+  destination.s_addr = ipHeader->ip_dst;
+ 
+  struct sr_rt* routingTableEntry = findLongestMatchingPrefix(sr, destination);
+  if (routingTableEntry == 0)
+  {
+    /* send ICMP net unreachable type 3 code 0 */
+    fprintf(stderr, "No match for next hop, sending ICMP net unreachable (type 3, code 0)\n");
+
+    return;
+  }
+  
+    fprintf(stderr, "Found routing entry!\n");
+  /* if we have MAC address for next hop destination, send packet*/ 
+  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
+  /* ETH_makePacket(eth_hdr, ethertype_ip, uint8_t* src, eth_hdr->ether_shost); */
+  /* sendpacket */
+
+  free(forwarded_packet);
+
+
 
 }
 
@@ -261,9 +489,11 @@ void handle_IP(struct sr_instance* sr,
   /* Is for our router */
   if (IP_dstMatches(sr, packet, interface)) {
     if (ip_hdr->ip_p == IPPROTO_ICMP) {
-      ICMP_sendEcho(sr, packet, len, interface);
+      if ( ICMP_checkValidity(ip_hdr) ){
+         ICMP_sendEcho(sr, packet, len, interface);
+      }
     } else if (ip_hdr->ip_p == IPPROTO_TCP || ip_hdr->ip_p == IPPROTO_UDP) {
-      ICMP_sendUnreachable(sr, packet, len, interface);
+      ICMP_sendPortUnreachable(sr, packet, len, interface);
     } else {
       /* ignore anything else */
       return;

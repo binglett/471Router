@@ -76,13 +76,18 @@ void ARP_makePacket(struct sr_arp_hdr* arp_hdr, unsigned short ar_hdr, unsigned 
         unsigned char ar_pln, unsigned short ar_op, unsigned char ar_sha[ETHER_ADDR_LEN], uint32_t ar_sip, 
         unsigned char at_tha[ETHER_ADDR_LEN], uint32_t ar_tip);
 void checkandSendWaitingPackets(struct sr_instance* sr, int i);
-void ICMP_sendUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendNetUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendPortUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendHostUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendTimeExceeded(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 int ARP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface);
 int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface);
 void handle_ARP(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void handle_IP(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+struct sr_rt* findlongestPrefixMatching(struct sr_instance* sr, struct in_addr addr);
+int ICMP_checkValidity(sr_ip_hdr_t* ipHeader);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
