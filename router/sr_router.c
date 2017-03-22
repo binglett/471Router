@@ -79,9 +79,7 @@ int ICMP_checkValidity(sr_ip_hdr_t* ipHeader)
    MAC address corresponding to the given interface */
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr) {
   struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
-  /* create ARP header */
   struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(packet + sizeof(sr_ethernet_hdr_t)); 
-        /* create ARP header */
 
   /* create ARP packet by modifying the recieved packet */
   ARP_makePacket(arp_hdr, arp_hdr->ar_hrd, arp_hdr->ar_pro, arp_hdr->ar_hln, arp_hdr->ar_pln, htons(arp_op_reply), 
@@ -93,6 +91,33 @@ void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
   /* send created ethernet wrapped arp reply packet */
   sr_send_packet(sr, packet, len, interface);
 
+}
+
+/* creates and sends a broadcast ARP request*/
+void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_arpreq *req) {
+
+    uint8_t MACbroadcastAddr[ETHER_ADDR_LEN];    
+    int i;
+    
+    uint8_t* ARPrequest = (uint8_t*) malloc(sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t));
+    memset(ARPrequest, 0, sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t));
+    
+    struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)ARPrequest;
+    struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(ARPrequest + sizeof(sr_ethernet_hdr_t)); 
+
+    /* assert(ARPrequest); */
+
+    for (i = 0; i < ETHER_ADDR_LEN; i++) {
+        MACbroadcastAddr[i] = 0xff;      
+    }
+
+    ARP_makePacket(arp_hdr, htons(arp_hrd_ethernet), htons(ethertype_ip), 6, 4, htons(arp_op_request), 
+      interface->addr, interface->ip, MACbroadcastAddr, req->ip);
+
+    ETH_makePacket(eth_hdr, ethertype_arp, interface->addr, MACbroadcastAddr);
+
+    /* send away */
+    sr_send_packet(sr, ARPrequest, (sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t)), interface->name);
 }
 
 /* places the given arp reply into the arp cache in sr instance*/
@@ -176,7 +201,6 @@ void checkandSendWaitingPackets(struct sr_instance* sr, int newArpEntryIndex) {
         for (i = 0; i < ETHER_ADDR_LEN; i++) {
           arp_hdr->ar_tha[i] = thabuf[i];
         }
-        /* !!! do I need to make packet again?*/
         sr_send_packet(sr, currentPack->buf, currentPack->len, currentPack->iface);
         currentPack = currentPack->next;
       }
@@ -200,7 +224,7 @@ void ICMP_sendPortUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned 
 
 }
 
-void ICMP_sendHostUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+void ICMP_sendHostUnreachable(struct sr_instance* sr, struct sr_packet* packets) {
 
       fprintf(stderr, "ICMP send port unreachable, type 3 code 3\n");
 /* can use default type here?
@@ -415,18 +439,28 @@ int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
 
 /* See pseudo-code in sr_arpcache.h */
 void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
-  /* TODO: Fill this in 
-   if difftime(now, req->sent) > 1.0
-           if req->times_sent >= 5:
-               send icmp host unreachable to source addr of all pkts waiting
-                 on this request
-               arpreq_destroy(req)
-           else:
-               send arp request
-               req->sent = now
-               req->times_sent++
-               */
-
+  if (difftime(time(NULL), req->sent) > 1.0) {
+    if (req->times_sent >= 5) {
+      ICMP_sendHostUnreachable(sr, req->packets);
+      sr_arpreq_destroy(&(sr->cache), req);
+    } else {
+      /* TODO: get interface */
+      /*struct sr_if* ifptr = sr->if_list;
+      while (ifptr) {
+        if (ifptr->ip == requested.s_addr) {     
+          return;
+        } else {
+          ifptr = ifptr->next;
+        }
+      }
+      */
+      struct sr_if* interface;
+      /* !!! send arp request */
+      ARP_sendRequest(sr, interface, req);
+      req->sent = time(NULL);
+      req->times_sent++;
+    }
+  }
 }
 /* Given an ARP packet, decides what to do based on 
    whether it is a request or reply */
@@ -440,19 +474,19 @@ void handle_ARP(struct sr_instance* sr,
   struct sr_if* ifptr = sr->if_list;
   int i = 0; /* for looping thorugh waiting IP packets */
 
-  fprintf(stdout, "My interfaces: \n");
+  fprintf(stdout, "=== sr_router::sr_handleARP::My interfaces: \n");
   sr_print_if_list(sr);
 
   /* if ARP is request, check list of interfaces to see if have the 
      the MAC addr of request IP and send reply if we have it */
   if (ntohs(arp_hdr->ar_op) == arp_op_request) {
     requested.s_addr = arp_hdr->ar_tip;
-    fprintf(stdout, "-> ARP Request: who has %s?\n", inet_ntoa(requested));
+    fprintf(stdout, "=== sr_router::sr_handleARP::ARP Request: looking for %s?\n", inet_ntoa(requested));
     /* Check if has it in its table */
     while (ifptr) {
       /* Has in its table, so send reply */
       if (ifptr->ip == requested.s_addr) {     
-        fprintf(stdout, "HWaddr to send: %s\n", ifptr->name);
+        fprintf(stdout, "=== sr_router::sr_handleARP::MAC addr to send: %s\n", ifptr->name);
         ARP_sendReply(sr, packet, len, interface, ifptr);
         return;
       } else {
@@ -461,14 +495,14 @@ void handle_ARP(struct sr_instance* sr,
     }
 
     if (!ifptr) {
-      printf("-> ARP Request: we do not have %s\n", inet_ntoa(requested));
+      printf("=== sr_router::sr_handleARP::ARP Request: router doesn't have %s\n", inet_ntoa(requested));
     }    
   } 
 
   if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
     replied.s_addr = arp_hdr->ar_sip;
 
-    printf("-> ARP Reply: %s is at ", inet_ntoa(replied));
+    printf("=== sr_router::sr_handleARP::ARP Reply: %s is at ", inet_ntoa(replied));
 
     /* Cache the reply */
     ARP_cacheEntry(sr, arp_hdr);
