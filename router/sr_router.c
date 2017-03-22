@@ -231,6 +231,7 @@ void ICMP_sendHostUnreachable(struct sr_instance* sr, struct sr_packet* packets)
  type 3 code 3 */
 
 }
+
 void ICMP_sendTimeExceeded(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
 
       fprintf(stderr, "ICMP send time exceeded, type 11 code 0\n");
@@ -247,8 +248,9 @@ fprintf(stderr, "ICMP send echo, type 0\n");
  /*  struct sr_icmp_hdr outPacket; */
   
   sr_icmp_hdr_t* icmpHeader;
-  sr_ip_hdr_t* icmpErrorHeader;
+  sr_ip_hdr_t* icmpErrorDataHeader;
   sr_ip_hdr_t* echoIPHeader;
+  sr_ip_hdr_t* newPacketHeader;
   
   struct sr_rt* rt;
   interface = (struct sr_if*)interface;
@@ -272,23 +274,30 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   /*icmpHeader = get_icmp_header(echoIPHeader); */
   icmpHeader->icmp_type = 0;
   icmpHeader->icmp_code = 0;
-  icmpHeader->icmp_sum = 0;
+  icmpHeader->icmp_sum = 0; /* baaaad things can happen if we don't got this*/
   
   /* get length of ip header and create a new packet */
   totalSize = ntohs(echoIPHeader->ip_len);
   icmpSize = totalSize - IP_HEADER_MIN_LEN;
   newPacket = malloc(totalSize);
   memcpy(newPacket,echoIPHeader,totalSize);
+  
+  newPacketHeader = (sr_ip_hdr_t*)(newPacket);
+  uint8_t* newICMPHeader = (uint8_t*)(newPacketHeader)
+  uint8_t newPacketHeaderSize = newPacketHeader->ip_hl << 2;
+  newICMPHeader += newPacketHeader;
+  
 
    /* Compute checksum */
   icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
   icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
   icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
-
   /*icmpHeader = get_icmp_header((sr_ip_hdr_t*)new_ip_packet); */
   icmpHeader->icmp_sum = cksum(icmpHeader,icmpSize);
+
   /* ETH make packet
   send packet */
+  
 }
 
 
