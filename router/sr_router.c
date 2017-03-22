@@ -260,7 +260,6 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   uint16_t icmpSize; 
   uint16_t totalSize;
   uint8_t* newPacket;
-  uint8_t* new_ip_packet_ptr;
   uint32_t ip_dst;
   
   /* Repurpose packet and send back to sender */
@@ -285,22 +284,24 @@ fprintf(stderr, "ICMP send echo, type 0\n");
   newPacket = malloc(totalSize);
   memcpy(newPacket,echoIPHeader,totalSize);
   
+  /* get ICMP header so we can change checksum */
   newPacketHeader = (sr_ip_hdr_t*)(newPacket);
   uint8_t* newICMPHeader = (uint8_t*)(newPacketHeader);
   uint8_t newPacketHeaderSize = newPacketHeader->ip_hl << 2;
   newICMPHeader = newICMPHeader + newPacketHeaderSize;
-  
+  newICMPHeaderP = (sr_icmp_hdr_t*)(icmpHeader);
 
    /* Compute checksum */
-  icmpHeaderLocation = (uint8_t*)(echoIPHeader);	
-  icmpHeaderLocation = icmpHeaderLocation + (echoIPHeader->ip_hl << 2);
-  icmpHeader = (sr_icmp_hdr_t*)(icmpHeaderLocation);
-  /*icmpHeader = get_icmp_header((sr_ip_hdr_t*)new_ip_packet); */
-  icmpHeader->icmp_sum = cksum(icmpHeader,icmpSize);
+  newICMPHeaderP->icmp_sum = cksum(newICMPHeader,icmpSize);
 
   /* ETH make packet
   send packet */
   
+  struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)newPacket;
+
+  ETH_makePacket(eth_hdr, ethertype_ip, echoIPHeader->ip_dst, eth_hdr->ether_shost);
+  sr_send_packet(sr, newPacket, len, interface);
+  free(newPacket);
 }
 
 
@@ -414,6 +415,9 @@ void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char*
     fprintf(stderr, "Found routing entry!\n");
   /* if we have MAC address for next hop destination, send packet*/ 
   struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)packet;
+
+   
+  
   /* ETH_makePacket(eth_hdr, ethertype_ip, uint8_t* src, eth_hdr->ether_shost); */
   /* sendpacket */
 
