@@ -94,7 +94,7 @@ void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
 }
 
 /* creates and sends a broadcast ARP request*/
-void ARP_sendRequest(struct sr_instance* sr, char* interface, struct sr_arpreq *req) {
+void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_arpreq *req) {
 
     uint8_t MACbroadcastAddr[ETHER_ADDR_LEN];    
     int i;
@@ -105,19 +105,19 @@ void ARP_sendRequest(struct sr_instance* sr, char* interface, struct sr_arpreq *
     struct sr_ethernet_hdr* eth_hdr = (struct sr_ethernet_hdr*)ARPrequest;
     struct sr_arp_hdr* arp_hdr = (struct sr_arp_hdr*)(ARPrequest + sizeof(sr_ethernet_hdr_t)); 
 
-    // assert(ARPrequest);
+    /* assert(ARPrequest); */
 
     for (i = 0; i < ETHER_ADDR_LEN; i++) {
         MACbroadcastAddr[i] = 0xff;      
     }
 
-    ARP_makePacket(ARPrequest, htons(arp_hrd_ethernet), htons(ethertype_ip), 6, 4, htons(arp_op_request), 
+    ARP_makePacket(arp_hdr, htons(arp_hrd_ethernet), htons(ethertype_ip), 6, 4, htons(arp_op_request), 
       interface->addr, interface->ip, MACbroadcastAddr, req->ip);
 
-    makeethernet(ethernetHdr, ETHERTYPE_ARP, interface->addr, MACbroadcastAddr);
+    ETH_makePacket(eth_hdr, ethertype_arp, interface->addr, MACbroadcastAddr);
 
     /* send away */
-    sr_send_packet(sr, requestPacket, (sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t)), interface->name);
+    sr_send_packet(sr, ARPrequest, (sizeof(sr_ethernet_hdr_t) * sizeof(sr_arp_hdr_t)), interface->name);
 }
 
 /* places the given arp reply into the arp cache in sr instance*/
@@ -224,7 +224,7 @@ void ICMP_sendPortUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned 
 
 }
 
-void ICMP_sendHostUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface) {
+void ICMP_sendHostUnreachable(struct sr_instance* sr, struct sr_packet* packets) {
 
       fprintf(stderr, "ICMP send port unreachable, type 3 code 3\n");
 /* can use default type here?
@@ -432,12 +432,23 @@ int IP_dstMatches(struct sr_instance* sr, uint8_t* packet, char* interface){
 
 
 /* See pseudo-code in sr_arpcache.h */
-void handle_arpreq(struct sr_instance* sr, char* interface, struct sr_arpreq *req){
+void handle_arpreq(struct sr_instance* sr, struct sr_arpreq *req){
   if (difftime(time(NULL), req->sent) > 1.0) {
-    if (req.times_sent >= 5) {
-      ICMP_sendUnreachable(sr, req->packets);
-      arpreq_destroy(&(sr->cache), req)
+    if (req->times_sent >= 5) {
+      ICMP_sendHostUnreachable(sr, req->packets);
+      sr_arpreq_destroy(&(sr->cache), req);
     } else {
+      /* TODO: get interface */
+      /*struct sr_if* ifptr = sr->if_list;
+      while (ifptr) {
+        if (ifptr->ip == requested.s_addr) {     
+          return;
+        } else {
+          ifptr = ifptr->next;
+        }
+      }
+      */
+      struct sr_if* interface;
       /* !!! send arp request */
       ARP_sendRequest(sr, interface, req);
       req->sent = time(NULL);

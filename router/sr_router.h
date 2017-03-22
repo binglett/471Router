@@ -70,7 +70,7 @@ void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 /* -- sr_router.c helper functions --*/
 void ARP_sendReply(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, struct sr_if* ifptr);
-void ARP_sendRequest(struct sr_instance* sr, char* interface, struct sr_arpreq *req);
+void ARP_sendRequest(struct sr_instance* sr, struct sr_if* interface, struct sr_arpreq *req);
 void ARP_cacheEntry(struct sr_instance* sr, struct sr_arp_hdr* arp_hdr);
 void ETH_makePacket(struct sr_ethernet_hdr* eth_hdr, uint16_t type, uint8_t* src, uint8_t* dst);
 void ARP_makePacket(struct sr_arp_hdr* arp_hdr, unsigned short ar_hdr, unsigned short ar_pro, unsigned char ar_hln, 
@@ -79,7 +79,7 @@ void ARP_makePacket(struct sr_arp_hdr* arp_hdr, unsigned short ar_hdr, unsigned 
 void checkandSendWaitingPackets(struct sr_instance* sr, int i);
 void ICMP_sendNetUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void ICMP_sendPortUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
-void ICMP_sendHostUnreachable(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
+void ICMP_sendHostUnreachable(struct sr_instance* sr, struct sr_packet* packets);
 void ICMP_sendTimeExceeded(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void ICMP_sendEcho(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
 void IP_forward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface);
@@ -97,6 +97,6 @@ void sr_set_ether_addr(struct sr_instance* , const unsigned char* );
 void sr_print_if_list(struct sr_instance* );
 
 /* -- sr_arpcache.c and sr_router.c -- */
-void handle_arpreq(struct sr_instance* , struct sr_arpreq* );
+void handle_arpreq(struct sr_instance*, struct sr_arpreq*);
 
 #endif /* SR_ROUTER_H */
